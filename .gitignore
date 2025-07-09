@@ -25,8 +25,6 @@ MANIFEST
 venv/
 env/
 ENV/
-env.bak/
-venv.bak/
 
 # IDE
 .vscode/
@@ -35,18 +33,25 @@ venv.bak/
 *.swo
 *~
 
-# Project specific
-downloads/
-*.mp4
-*.mp3
-*.webm
-*.m4a
-temp/
-logs/
+# OS
+.DS_Store
+Thumbs.db
 
 # Streamlit
 .streamlit/
 
-# OS
-.DS_Store
-Thumbs.db 
+# 雲端硬碟認證檔案 (重要！)
+cloud_config/
+*.json
+*.txt
+!requirements.txt
+!packages.txt
+
+# 下載的檔案
+downloads/
+
+# 日誌檔案
+*.log
+
+# 測試檔案
+test_upload.txt 
