@@ -6,6 +6,13 @@ import time
 # 匯入我們重構後的下載器
 from youtube_downloader import YouTubeDownloader
 
+# 檢查雲端上傳功能是否可用
+try:
+    from cloud_uploader import CloudUploadManager
+    CLOUD_UPLOAD_AVAILABLE = True
+except ImportError:
+    CLOUD_UPLOAD_AVAILABLE = False
+
 # --- 頁面設定 ---
 st.set_page_config(
     page_title="YouTube 多格式下載器",
@@ -22,6 +29,10 @@ if 'download_result' not in st.session_state:
     st.session_state.download_result = None
 if 'is_downloading' not in st.session_state:
     st.session_state.is_downloading = False
+if 'cloud_services' not in st.session_state:
+    st.session_state.cloud_services = []
+if 'auto_upload' not in st.session_state:
+    st.session_state.auto_upload = False
 
 # --- 介面 ---
 st.title("🎬 YouTube 多格式下載器")
@@ -30,6 +41,12 @@ st.markdown("輸入 YouTube 影片網址，選擇格式，即可輕鬆下載！"
 # --- 輸入區 ---
 url = st.text_input("YouTube 影片網址", placeholder="https://www.youtube.com/watch?v=...")
 format_choice = st.radio("選擇下載格式", ("MP4 影片", "MP3 音訊"), horizontal=True)
+
+# --- 雲端上傳設定 ---
+st.markdown("---")
+st.subheader("☁️ 雲端硬碟上傳設定")
+st.session_state.auto_upload = st.checkbox("啟用自動上傳到雲端硬碟", value=st.session_state.auto_upload)
+st.info("目前只支援自動上傳到 Google Drive，且會自動依格式分流到指定資料夾。\n\nMP3 會上傳到 folder id: 1n-Y81X-lvha8KP7HxoWd17Chg5O0XN6w\nMP4 會上傳到 folder id: 1JocRza3zPEerZkg2z74ROOigN5XI2aCP")
 
 # 觸發影片資訊獲取
 if url:
@@ -68,44 +85,47 @@ if st.session_state.video_info:
 
 # --- 下載按鈕 ---
 if st.session_state.video_info:
-    if st.button(f"開始下載 {format_choice.split(' ')[0]}", type="primary", use_container_width=True, disabled=st.session_state.is_downloading):
-        st.session_state.is_downloading = True
-        st.session_state.download_result = None
-        
-        progress_bar = st.progress(0, text="準備開始下載...")
-        status_text = st.empty()
+    # 只在 session_state 沒有 download_result 時才顯示下載按鈕
+    if st.session_state.download_result is None:
+        if st.button(f"開始下載 {format_choice.split(' ')[0]}", type="primary", use_container_width=True, disabled=st.session_state.is_downloading):
+            st.session_state.is_downloading = True
+            st.session_state.download_result = None
+            progress_bar = st.progress(0, text="準備開始下載...")
+            status_text = st.empty()
 
-        def progress_hook(d):
-            if d['status'] == 'downloading':
-                # 提取進度百分比
-                percent_str = d.get('_percent_str', '0.0%')
-                percent = float(re.findall(r"(\d+\.?\d*)%", percent_str)[0])
-                progress_bar.progress(int(percent), text=f"下載中... {percent:.1f}%")
-            elif d['status'] == 'finished':
-                progress_bar.progress(100, text="下載完成，正在進行後處理...")
+            def progress_hook(d):
+                if d['status'] == 'downloading':
+                    percent_str = d.get('_percent_str', '0.0%')
+                    percent = float(re.findall(r"(\d+\.?\d*)%", percent_str)[0])
+                    progress_bar.progress(int(percent), text=f"下載中... {percent:.1f}%")
+                elif d['status'] == 'finished':
+                    progress_bar.progress(100, text="下載完成，正在進行後處理...")
 
-        try:
-            downloader = YouTubeDownloader()
-            downloader.add_progress_hook(progress_hook)
-            
-            download_func = downloader.download_mp4 if format_choice == "MP4 影片" else downloader.download_mp3
-            filepath = download_func(url)
-            
-            if filepath and Path(filepath).exists():
-                st.session_state.download_result = {
-                    'success': True,
-                    'path': filepath,
-                    'filename': Path(filepath).name
-                }
-            else:
-                raise Exception("下載後找不到檔案。")
-
-        except Exception as e:
-            st.session_state.download_result = {'success': False, 'error': str(e)}
-        
-        st.session_state.is_downloading = False
-        # 強制重跑一次以顯示下載結果
-        st.rerun()
+            try:
+                downloader = YouTubeDownloader(
+                    auto_upload=st.session_state.auto_upload,
+                    mp3_folder_id="1n-Y81X-lvha8KP7HxoWd17Chg5O0XN6w",
+                    mp4_folder_id="1JocRza3zPEerZkg2z74ROOigN5XI2aCP"
+                )
+                downloader.add_progress_hook(progress_hook)
+                download_func = downloader.download_mp4 if format_choice == "MP4 影片" else downloader.download_mp3
+                result = download_func(url)
+                if result['file_path'] and Path(result['file_path']).exists():
+                    st.session_state.download_result = {
+                        'success': True,
+                        'path': result['file_path'],
+                        'filename': Path(result['file_path']).name,
+                        'upload_result': result.get('upload_result')
+                    }
+                else:
+                    raise Exception("下載後找不到檔案。")
+            except Exception as e:
+                st.session_state.download_result = {'success': False, 'error': str(e)}
+            st.session_state.is_downloading = False
+            st.rerun()
+    else:
+        # 已有下載結果時不再自動觸發下載，只顯示結果
+        pass
 
 # --- 顯示下載結果 ---
 if st.session_state.download_result:
@@ -113,6 +133,38 @@ if st.session_state.download_result:
     if result['success']:
         st.success(f"✅ **{result['filename']}** 下載成功！")
         
+        # 顯示雲端上傳結果
+        if result.get('upload_result'):
+            st.markdown("---")
+            st.subheader("☁️ 雲端上傳結果")
+            
+            upload_result = result['upload_result']
+            if isinstance(upload_result, dict) and 'success' in upload_result:
+                # 單一服務上傳結果
+                if upload_result['success']:
+                    st.success(f"✅ 已上傳到 {upload_result.get('service', '雲端硬碟')}")
+                    if upload_result.get('web_link'):
+                        st.markdown(f"🔗 [查看檔案]({upload_result['web_link']})")
+                else:
+                    st.error(f"❌ 上傳失敗: {upload_result.get('error', '未知錯誤')}")
+            else:
+                # 多服務上傳結果
+                for service, service_result in upload_result.items():
+                    service_names = {
+                        'google_drive': 'Google Drive',
+                        'dropbox': 'Dropbox',
+                        'onedrive': 'OneDrive'
+                    }
+                    service_name = service_names.get(service, service)
+                    
+                    if service_result.get('success'):
+                        st.success(f"✅ 已上傳到 {service_name}")
+                        if service_result.get('web_link'):
+                            st.markdown(f"🔗 [{service_name} 查看檔案]({service_result['web_link']})")
+                    else:
+                        st.error(f"❌ {service_name} 上傳失敗: {service_result.get('error', '未知錯誤')}")
+        
+        # 本地下載按鈕
         file_path = result['path']
         with open(file_path, "rb") as file:
             st.download_button(

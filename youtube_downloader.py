@@ -3,11 +3,21 @@
 """
 YouTube 多格式下載器
 支援下載 YouTube 影片為 MP4 格式或音訊為 MP3 格式
+並自動上傳到雲端硬碟
 """
 
 import yt_dlp
 from pathlib import Path
 import logging
+from typing import Optional, Dict, Any
+
+# 匯入雲端上傳模組
+try:
+    from cloud_uploader import CloudUploadManager
+    CLOUD_UPLOAD_AVAILABLE = True
+except ImportError:
+    CLOUD_UPLOAD_AVAILABLE = False
+    logging.warning("雲端上傳模組無法載入，將無法使用自動上傳功能")
 
 # 設定日誌
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -18,18 +28,45 @@ class YouTubeDownloader:
     提供獲取影片資訊、下載 MP4 和 MP3 的功能。
     """
     
-    def __init__(self, download_dir="downloads"):
+    def __init__(self, download_dir="downloads", auto_upload=False, mp3_folder_id=None, mp4_folder_id=None):
         """
         初始化下載器。
         :param download_dir: 下載檔案的儲存目錄。
+        :param auto_upload: 是否自動上傳到雲端硬碟。
+        :param mp3_folder_id: Google Drive MP3 目標資料夾 ID。
+        :param mp4_folder_id: Google Drive MP4 目標資料夾 ID。
         """
         self.download_dir = Path(download_dir)
         self.download_dir.mkdir(exist_ok=True)
         self.progress_hooks = []
+        self.auto_upload = auto_upload
+        self.mp3_folder_id = mp3_folder_id
+        self.mp4_folder_id = mp4_folder_id
+        self.cloud_manager_mp3 = CloudUploadManager(folder_id=mp3_folder_id) if self.auto_upload and CLOUD_UPLOAD_AVAILABLE else None
+        self.cloud_manager_mp4 = CloudUploadManager(folder_id=mp4_folder_id) if self.auto_upload and CLOUD_UPLOAD_AVAILABLE else None
 
     def add_progress_hook(self, hook):
         """添加進度回調鉤子"""
         self.progress_hooks.append(hook)
+    
+    def upload_to_cloud(self, file_path: str, file_type: str = "mp4") -> Dict[str, Any]:
+        """
+        上傳檔案到雲端硬碟
+        :param file_path: 要上傳的檔案路徑
+        :param file_type: "mp3" 或 "mp4"，決定上傳到哪個資料夾
+        :return: 上傳結果字典
+        """
+        if file_type == "mp3":
+            cloud_manager = self.cloud_manager_mp3
+        else:
+            cloud_manager = self.cloud_manager_mp4
+        if not cloud_manager:
+            return {"success": False, "error": "雲端上傳功能未啟用或不可用"}
+        try:
+            return cloud_manager.upload(file_path)
+        except Exception as e:
+            logging.error(f"雲端上傳失敗: {e}")
+            return {"success": False, "error": str(e)}
 
     def get_video_info(self, url):
         """
@@ -86,7 +123,7 @@ class YouTubeDownloader:
         """
         下載高品質的 MP4 影片。
         :param url: YouTube 影片網址。
-        :return: 檔案路徑或 None。
+        :return: 包含檔案路徑和上傳結果的字典。
         """
         logging.info(f"準備下載 MP4: {url}")
         ydl_opts = {
@@ -97,13 +134,22 @@ class YouTubeDownloader:
             'quiet': True,
             'no_warnings': True,
         }
-        return self._download(url, ydl_opts)
+        
+        file_path = self._download(url, ydl_opts)
+        result = {"file_path": file_path, "upload_result": None}
+        
+        # 如果下載成功且啟用自動上傳，則上傳到雲端
+        if file_path and self.auto_upload:
+            logging.info("開始上傳到雲端硬碟（MP4 資料夾）...")
+            result["upload_result"] = self.upload_to_cloud(file_path, file_type="mp4")
+        
+        return result
 
     def download_mp3(self, url):
         """
         下載並轉換為 MP3 音訊。
         :param url: YouTube 影片網址。
-        :return: 檔案路徑或 None。
+        :return: 包含檔案路徑和上傳結果的字典。
         """
         logging.info(f"準備下載 MP3: {url}")
         # 建立一個唯一的檔名模板，避免後處理器找不到檔案
@@ -129,10 +175,18 @@ class YouTubeDownloader:
                 # 後處理後，副檔名會改變
                 final_filepath = Path(original_filepath).with_suffix('.mp3')
                 if final_filepath.exists():
-                    return str(final_filepath)
+                    file_path = str(final_filepath)
+                    result = {"file_path": file_path, "upload_result": None}
+                    
+                    # 如果啟用自動上傳，則上傳到雲端
+                    if self.auto_upload:
+                        logging.info("開始上傳到雲端硬碟（MP3 資料夾）...")
+                        result["upload_result"] = self.upload_to_cloud(file_path, file_type="mp3")
+                    
+                    return result
                 else:
                     logging.error(f"MP3 轉換後找不到檔案: {final_filepath}")
-                    return None
+                    return {"file_path": None, "upload_result": None}
         except Exception as e:
             logging.error(f"MP3 下載失敗: {e}")
             raise e 
