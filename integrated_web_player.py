@@ -590,7 +590,7 @@ with tab3:
         # 顯示所有音樂檔案
         for i, file_path in enumerate(st.session_state.music_files, 1):
             with st.container():
-                col1, col2, col3, col4 = st.columns([1, 3, 1, 1])
+                col1, col2, col3, col4, col5 = st.columns([1, 3, 1, 1, 1])
                 
                 with col1:
                     st.write(f"{i}")
@@ -617,6 +617,19 @@ with tab3:
                         mime=f"audio/{file_path.suffix[1:]}",
                         key=f"download_{i}"
                     )
+                
+                with col5:
+                    # 刪除按鈕
+                    if st.button("🗑️", key=f"delete_{i}", help="刪除此歌曲"):
+                        try:
+                            file_path.unlink()
+                            st.success("✅ 已刪除")
+                            # 重新掃描播放清單
+                            music_files = scan_music_folder()
+                            st.session_state.music_files = music_files
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"刪除失敗: {e}")
                 
                 st.markdown("---")
     else:
