@@ -31,6 +31,20 @@ except ImportError as e:
     st.warning(f"⚠️ 雲端上傳功能不可用: {e}")
     CLOUD_UPLOAD_AVAILABLE = False
 
+# 匯入密碼驗證模組
+try:
+    from password_auth import (
+        init_password_session, 
+        show_login_page, 
+        show_security_info, 
+        change_password, 
+        show_security_help
+    )
+    PASSWORD_AUTH_AVAILABLE = True
+except ImportError as e:
+    st.warning(f"⚠️ 密碼驗證功能不可用: {e}")
+    PASSWORD_AUTH_AVAILABLE = False
+
 # --- 頁面設定 ---
 st.set_page_config(
     page_title="🎬 YouTube 下載器 & 🎵 網頁播放器",
@@ -795,7 +809,27 @@ with tab4:
 
 def main():
     """主函數"""
-    pass
+    # 初始化密碼驗證
+    if PASSWORD_AUTH_AVAILABLE:
+        init_password_session()
+        
+        # 檢查是否已登入
+        if not st.session_state.get('password_verified', False):
+            show_login_page()
+            return
+    
+    # 顯示安全資訊在側邊欄
+    if PASSWORD_AUTH_AVAILABLE:
+        show_security_info()
+        
+        # 處理密碼管理功能
+        if st.session_state.get('show_change_password', False):
+            change_password()
+            return
+        
+        if st.session_state.get('show_security_help', False):
+            show_security_help()
+            return
 
 if __name__ == "__main__":
     main() 
