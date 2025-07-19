@@ -45,6 +45,33 @@ except ImportError as e:
     st.warning(f"⚠️ 密碼驗證功能不可用: {e}")
     PASSWORD_AUTH_AVAILABLE = False
 
+# --- 密碼驗證檢查 ---
+def check_authentication():
+    """檢查密碼驗證狀態"""
+    if PASSWORD_AUTH_AVAILABLE:
+        init_password_session()
+        
+        # 檢查是否已登入
+        if not st.session_state.get('password_verified', False):
+            show_login_page()
+            st.stop()  # 完全停止程式執行
+    
+    # 顯示安全資訊在側邊欄
+    if PASSWORD_AUTH_AVAILABLE:
+        show_security_info()
+        
+        # 處理密碼管理功能
+        if st.session_state.get('show_change_password', False):
+            change_password()
+            st.stop()
+        
+        if st.session_state.get('show_security_help', False):
+            show_security_help()
+            st.stop()
+
+# 首先進行密碼驗證
+check_authentication()
+
 # --- 頁面設定 ---
 st.set_page_config(
     page_title="🎬 YouTube 下載器 & 🎵 網頁播放器",
@@ -809,27 +836,9 @@ with tab4:
 
 def main():
     """主函數"""
-    # 初始化密碼驗證
-    if PASSWORD_AUTH_AVAILABLE:
-        init_password_session()
-        
-        # 檢查是否已登入
-        if not st.session_state.get('password_verified', False):
-            show_login_page()
-            return
-    
-    # 顯示安全資訊在側邊欄
-    if PASSWORD_AUTH_AVAILABLE:
-        show_security_info()
-        
-        # 處理密碼管理功能
-        if st.session_state.get('show_change_password', False):
-            change_password()
-            return
-        
-        if st.session_state.get('show_security_help', False):
-            show_security_help()
-            return
+    # 密碼驗證已經在程式開始時完成
+    # 這裡不需要重複驗證
+    pass
 
 if __name__ == "__main__":
     main() 

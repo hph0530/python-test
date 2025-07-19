@@ -13,6 +13,19 @@ from mutagen import File
 from mutagen.mp3 import MP3
 import time
 
+# 導入密碼驗證模組
+try:
+    from password_auth import (
+        init_password_session, 
+        show_login_page, 
+        show_security_info, 
+        change_password, 
+        show_security_help
+    )
+    PASSWORD_AUTH_AVAILABLE = True
+except ImportError as e:
+    PASSWORD_AUTH_AVAILABLE = False
+
 def scan_music_folder():
     """掃描音樂資料夾"""
     downloads_dir = Path("downloads")
@@ -134,6 +147,15 @@ def create_iphone_audio_player(audio_bytes, mime_type, filename):
             "4. 檢查是否允許自動播放")
 
 def main():
+    # 密碼驗證檢查
+    if PASSWORD_AUTH_AVAILABLE:
+        init_password_session()
+        
+        # 檢查是否已登入
+        if not st.session_state.get('password_verified', False):
+            show_login_page()
+            st.stop()  # 完全停止程式執行
+    
     st.set_page_config(
         page_title="iPhone 音訊播放器",
         page_icon="🎵",
@@ -142,6 +164,19 @@ def main():
     
     st.title("📱 iPhone 優化音訊播放器")
     st.markdown("專門為 iPhone 設計的音訊播放器，解決播放問題")
+    
+    # 顯示安全資訊在側邊欄
+    if PASSWORD_AUTH_AVAILABLE:
+        show_security_info()
+        
+        # 處理密碼管理功能
+        if st.session_state.get('show_change_password', False):
+            change_password()
+            st.stop()
+        
+        if st.session_state.get('show_security_help', False):
+            show_security_help()
+            st.stop()
     
     # 初始化 session state
     if 'music_files' not in st.session_state:

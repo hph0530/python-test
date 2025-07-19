@@ -12,6 +12,19 @@ import shutil
 from mutagen import File
 import time
 
+# 導入密碼驗證模組
+try:
+    from password_auth import (
+        init_password_session, 
+        show_login_page, 
+        show_security_info, 
+        change_password, 
+        show_security_help
+    )
+    PASSWORD_AUTH_AVAILABLE = True
+except ImportError as e:
+    PASSWORD_AUTH_AVAILABLE = False
+
 def scan_music_folder():
     """掃描音樂資料夾"""
     downloads_dir = Path("downloads")
@@ -153,6 +166,15 @@ def get_folder_stats():
     }
 
 def main():
+    # 密碼驗證檢查
+    if PASSWORD_AUTH_AVAILABLE:
+        init_password_session()
+        
+        # 檢查是否已登入
+        if not st.session_state.get('password_verified', False):
+            show_login_page()
+            st.stop()  # 完全停止程式執行
+    
     st.set_page_config(
         page_title="音樂檔案管理",
         page_icon="🎵",
@@ -161,6 +183,19 @@ def main():
     
     st.title("🎵 音樂檔案管理工具")
     st.markdown("管理您的音樂檔案，包含刪除、重新整理和檔案資訊")
+    
+    # 顯示安全資訊在側邊欄
+    if PASSWORD_AUTH_AVAILABLE:
+        show_security_info()
+        
+        # 處理密碼管理功能
+        if st.session_state.get('show_change_password', False):
+            change_password()
+            st.stop()
+        
+        if st.session_state.get('show_security_help', False):
+            show_security_help()
+            st.stop()
     
     # 初始化 session state
     if 'music_files' not in st.session_state:
