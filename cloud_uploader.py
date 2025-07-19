@@ -305,5 +305,57 @@ class CloudUploadManager:
     
     def __init__(self, folder_id=None):
         self.uploader = GoogleDriveUploader(folder_id=folder_id)
+    
+    def get_available_services(self) -> list:
+        """獲取可用的雲端服務列表"""
+        services = []
+        
+        # 檢查 Google Drive
+        if GOOGLE_AVAILABLE:
+            creds_file = Path("cloud_config") / "google_credentials.json"
+            if creds_file.exists():
+                services.append("google_drive")
+        
+        # 檢查 Dropbox
+        if DROPBOX_AVAILABLE:
+            token_file = Path("cloud_config") / "dropbox_token.txt"
+            if token_file.exists():
+                services.append("dropbox")
+        
+        # 檢查 OneDrive
+        if ONEDRIVE_AVAILABLE:
+            config_file = Path("cloud_config") / "onedrive_config.json"
+            if config_file.exists():
+                services.append("onedrive")
+        
+        return services
+    
+    def upload_to_service(self, service: str, file_path: str, remote_path: str = None) -> Dict[str, Any]:
+        """上傳檔案到指定的雲端服務"""
+        try:
+            if service == "google_drive":
+                return self.uploader.upload_file(file_path, remote_path)
+            elif service == "dropbox":
+                dropbox_uploader = DropboxUploader()
+                return dropbox_uploader.upload_file(file_path, remote_path)
+            elif service == "onedrive":
+                onedrive_uploader = OneDriveUploader()
+                return onedrive_uploader.upload_file(file_path, remote_path)
+            else:
+                return {"success": False, "error": f"不支援的服務: {service}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
+    def upload_to_all_services(self, file_path: str, remote_path: str = None) -> Dict[str, Dict[str, Any]]:
+        """上傳檔案到所有可用的雲端服務"""
+        results = {}
+        available_services = self.get_available_services()
+        
+        for service in available_services:
+            results[service] = self.upload_to_service(service, file_path, remote_path)
+        
+        return results
+    
     def upload(self, file_path: str, remote_path: str = None) -> Dict[str, Any]:
+        """預設上傳到 Google Drive"""
         return self.uploader.upload_file(file_path, remote_path) 
