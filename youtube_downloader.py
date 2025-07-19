@@ -53,7 +53,7 @@ class YouTubeDownloader:
     
     def _get_ydl_opts_base(self):
         """獲取基礎的 yt-dlp 選項，包含反 403 錯誤的設定"""
-        return {
+        opts = {
             'quiet': True,
             'no_warnings': True,
             'progress_hooks': self.progress_hooks,
@@ -77,6 +77,14 @@ class YouTubeDownloader:
             'no_check_certificate': True,
             'prefer_insecure': True,
         }
+        
+        # 如果存在 cookies 檔案，則使用它
+        cookies_file = Path("cookies.txt")
+        if cookies_file.exists():
+            opts['cookiefile'] = str(cookies_file)
+            logging.info("使用 cookies 檔案來避免 403 錯誤")
+        
+        return opts
     
     def upload_to_cloud(self, file_path: str, file_type: str = "mp4") -> Dict[str, Any]:
         """
