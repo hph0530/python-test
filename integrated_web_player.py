@@ -218,9 +218,14 @@ with tab1:
         with col2:
             st.subheader(info.get('title', '無標題'))
             st.caption(f"由 {info.get('uploader', '未知上傳者')} 上傳")
-            if info.get('duration'):
-                duration_str = time.strftime('%M:%S', time.gmtime(info['duration']))
-                st.write(f"時長: {duration_str}")
+            if info.get('duration') and isinstance(info['duration'], (int, float)):
+                try:
+                    duration_str = time.strftime('%M:%S', time.gmtime(info['duration']))
+                    st.write(f"時長: {duration_str}")
+                except (ValueError, TypeError):
+                    st.write("時長: 未知")
+            else:
+                st.write("時長: 未知")
             st.write(f"觀看次數: {info.get('view_count', 0):,}")
     
     if st.session_state.video_info:
@@ -375,9 +380,14 @@ with tab2:
                     with col2:
                         st.write(f"**{video.get('title', '無標題')}**")
                         st.caption(f"由 {video.get('uploader', '未知上傳者')} 上傳")
-                        if video.get('duration'):
-                            duration_str = time.strftime('%M:%S', time.gmtime(video['duration']))
-                            st.write(f"時長: {duration_str}")
+                        if video.get('duration') and isinstance(video['duration'], (int, float)):
+                            try:
+                                duration_str = time.strftime('%M:%S', time.gmtime(video['duration']))
+                                st.write(f"時長: {duration_str}")
+                            except (ValueError, TypeError):
+                                st.write("時長: 未知")
+                        else:
+                            st.write("時長: 未知")
                         st.write(f"觀看次數: {video.get('view_count', 0):,}")
                     
                     with col3:
