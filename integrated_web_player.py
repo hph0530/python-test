@@ -136,6 +136,40 @@ def get_audio_file_info(file_path):
             'file_size': file_path.stat().st_size
         }
 
+def get_audio_mime_type(file_path):
+    """獲取音訊檔案的 MIME 類型（iPhone 優化）"""
+    suffix = file_path.suffix.lower()
+    mime_map = {
+        '.mp3': 'audio/mpeg',
+        '.wav': 'audio/wav',
+        '.ogg': 'audio/ogg',
+        '.flac': 'audio/flac',
+        '.m4a': 'audio/mp4',
+        '.aac': 'audio/aac'
+    }
+    return mime_map.get(suffix, 'audio/mpeg')
+
+def create_iphone_audio_player(audio_bytes, mime_type, filename):
+    """創建 iPhone 優化的音訊播放器"""
+    import base64
+    
+    # 使用 HTML5 audio 元素，對 iPhone 更友好
+    audio_html = f"""
+    <audio controls style="width: 100%; max-width: 500px;">
+        <source src="data:{mime_type};base64,{base64.b64encode(audio_bytes).decode()}" type="{mime_type}">
+        您的瀏覽器不支援音訊播放。
+    </audio>
+    """
+    
+    st.markdown(audio_html, unsafe_allow_html=True)
+    
+    # 添加 iPhone 特定的提示
+    st.info("📱 **iPhone 用戶提示**: 如果無法播放，請嘗試：\n"
+            "1. 點擊播放按鈕後等待幾秒\n"
+            "2. 確保音量已開啟\n"
+            "3. 嘗試使用 Safari 瀏覽器\n"
+            "4. 檢查是否允許自動播放")
+
 # --- 主介面 ---
 st.title("🎬 YouTube 下載器 & 🎵 網頁播放器")
 st.markdown("下載 YouTube 影片並立即播放，享受完整的音樂體驗！")
@@ -527,11 +561,15 @@ with tab3:
             st.markdown("---")
             st.subheader(f"🎵 正在播放: {selected_file.name}")
             
-            # 使用 Streamlit 內建音訊播放器
+            # 使用 iPhone 優化的音訊播放器
             with open(selected_file, "rb") as f:
                 audio_bytes = f.read()
             
-            st.audio(audio_bytes, format=f'audio/{selected_file.suffix[1:]}')
+            # 獲取正確的 MIME 類型
+            mime_type = get_audio_mime_type(selected_file)
+            
+            # 創建 iPhone 優化播放器
+            create_iphone_audio_player(audio_bytes, mime_type, selected_file.name)
             
             # 下載按鈕
             st.markdown("---")
