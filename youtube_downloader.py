@@ -10,6 +10,8 @@ import yt_dlp
 from pathlib import Path
 import logging
 from typing import Optional, Dict, Any
+import time
+import random
 
 # 匯入雲端上傳模組
 try:
@@ -49,6 +51,33 @@ class YouTubeDownloader:
         """添加進度回調鉤子"""
         self.progress_hooks.append(hook)
     
+    def _get_ydl_opts_base(self):
+        """獲取基礎的 yt-dlp 選項，包含反 403 錯誤的設定"""
+        return {
+            'quiet': True,
+            'no_warnings': True,
+            'progress_hooks': self.progress_hooks,
+            # 反 403 錯誤設定
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Sec-Fetch-Mode': 'navigate',
+            },
+            # 重試設定
+            'retries': 10,
+            'fragment_retries': 10,
+            'skip_unavailable_fragments': True,
+            # 延遲設定
+            'sleep_interval': 1,
+            'max_sleep_interval': 5,
+            # 其他設定
+            'ignoreerrors': False,
+            'no_check_certificate': True,
+            'prefer_insecure': True,
+        }
+    
     def upload_to_cloud(self, file_path: str, file_type: str = "mp4") -> Dict[str, Any]:
         """
         上傳檔案到雲端硬碟
@@ -74,24 +103,31 @@ class YouTubeDownloader:
         :param url: YouTube 影片網址。
         :return: 包含影片資訊的字典，或在失敗時返回 None。
         """
-        ydl_opts = {
-            'quiet': True,
-            'no_warnings': True,
+        ydl_opts = self._get_ydl_opts_base()
+        ydl_opts.update({
             'extract_flat': True,
-        }
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                return {
-                    'title': info.get('title', '未知標題'),
-                    'thumbnail': info.get('thumbnail', ''),
-                    'duration': info.get('duration', 0),
-                    'uploader': info.get('uploader', '未知上傳者'),
-                    'view_count': info.get('view_count', 0),
-                }
-        except Exception as e:
-            logging.error(f"獲取影片資訊失敗: {e}")
-            return None
+        })
+        
+        # 重試機制
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    return {
+                        'title': info.get('title', '未知標題'),
+                        'thumbnail': info.get('thumbnail', ''),
+                        'duration': info.get('duration', 0),
+                        'uploader': info.get('uploader', '未知上傳者'),
+                        'view_count': info.get('view_count', 0),
+                    }
+            except Exception as e:
+                logging.warning(f"獲取影片資訊失敗 (嘗試 {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(random.uniform(2, 5))  # 隨機延遲
+                else:
+                    logging.error(f"獲取影片資訊最終失敗: {e}")
+                    return None
 
     def _download(self, url, ydl_opts):
         """
@@ -100,24 +136,29 @@ class YouTubeDownloader:
         :param ydl_opts: yt-dlp 的選項。
         :return: 下載成功時返回檔案路徑，失敗時返回 None。
         """
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                # 確保我們能獲取到下載後的檔案路徑
-                if info and '_filename' in info:
-                    return info['_filename']
-                # 如果是播放列表，_filename 可能不存在於頂層
-                elif info and 'entries' in info and info['entries']:
-                    return info['entries'][0]['_filename']
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+                    # 確保我們能獲取到下載後的檔案路徑
+                    if info and '_filename' in info:
+                        return info['_filename']
+                    # 如果是播放列表，_filename 可能不存在於頂層
+                    elif info and 'entries' in info and info['entries']:
+                        return info['entries'][0]['_filename']
+                    else:
+                        # 作為備案，從 outtmpl 推斷檔名
+                        # 這部分比較複雜，暫時先假設成功時能拿到 _filename
+                        logging.warning("無法直接從返回資訊中確定檔名")
+                        return None
+            except Exception as e:
+                logging.warning(f"下載失敗 (嘗試 {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(random.uniform(3, 8))  # 隨機延遲
                 else:
-                    # 作為備案，從 outtmpl 推斷檔名
-                    # 這部分比較複雜，暫時先假設成功時能拿到 _filename
-                    logging.warning("無法直接從返回資訊中確定檔名")
-                    return None
-        except Exception as e:
-            logging.error(f"下載失敗: {e}")
-            # 將異常向上拋出，讓呼叫者處理
-            raise e
+                    logging.error(f"下載最終失敗: {e}")
+                    raise e
 
     def download_mp4(self, url):
         """
@@ -126,14 +167,12 @@ class YouTubeDownloader:
         :return: 包含檔案路徑和上傳結果的字典。
         """
         logging.info(f"準備下載 MP4: {url}")
-        ydl_opts = {
+        ydl_opts = self._get_ydl_opts_base()
+        ydl_opts.update({
             'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
             'outtmpl': str(self.download_dir / '%(title)s.%(ext)s'),
             'merge_output_format': 'mp4',
-            'progress_hooks': self.progress_hooks,
-            'quiet': True,
-            'no_warnings': True,
-        }
+        })
         
         file_path = self._download(url, ydl_opts)
         result = {"file_path": file_path, "upload_result": None}
@@ -155,7 +194,8 @@ class YouTubeDownloader:
         # 建立一個唯一的檔名模板，避免後處理器找不到檔案
         output_template = self.download_dir / f"%(title)s_%(id)s.%(ext)s"
         
-        ydl_opts = {
+        ydl_opts = self._get_ydl_opts_base()
+        ydl_opts.update({
             'format': 'bestaudio/best',
             'outtmpl': str(output_template),
             'postprocessors': [{
@@ -163,10 +203,7 @@ class YouTubeDownloader:
                 'preferredcodec': 'mp3',
                 'preferredquality': '192',
             }],
-            'progress_hooks': self.progress_hooks,
-            'quiet': True,
-            'no_warnings': True,
-        }
+        })
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
