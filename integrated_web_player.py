@@ -61,6 +61,10 @@ if 'music_files' not in st.session_state:
     st.session_state.music_files = []
 if 'playlist_updated' not in st.session_state:
     st.session_state.playlist_updated = False
+if 'current_playlist_index' not in st.session_state:
+    st.session_state.current_playlist_index = 0
+if 'play_mode' not in st.session_state:
+    st.session_state.play_mode = "順序播放"  # 順序播放, 隨機播放, 單曲循環
 
 # --- 輔助函數 ---
 def scan_music_folder():
@@ -169,6 +173,50 @@ def create_iphone_audio_player(audio_bytes, mime_type, filename):
             "2. 確保音量已開啟\n"
             "3. 嘗試使用 Safari 瀏覽器\n"
             "4. 檢查是否允許自動播放")
+
+def get_next_song():
+    """獲取下一首歌曲"""
+    if not st.session_state.music_files:
+        return None
+    
+    current_index = st.session_state.current_playlist_index
+    total_songs = len(st.session_state.music_files)
+    
+    if st.session_state.play_mode == "順序播放":
+        next_index = (current_index + 1) % total_songs
+    elif st.session_state.play_mode == "隨機播放":
+        import random
+        next_index = random.randint(0, total_songs - 1)
+    else:  # 單曲循環
+        next_index = current_index
+    
+    return next_index
+
+def get_previous_song():
+    """獲取上一首歌曲"""
+    if not st.session_state.music_files:
+        return None
+    
+    current_index = st.session_state.current_playlist_index
+    total_songs = len(st.session_state.music_files)
+    
+    if st.session_state.play_mode == "順序播放":
+        prev_index = (current_index - 1) % total_songs
+    elif st.session_state.play_mode == "隨機播放":
+        import random
+        prev_index = random.randint(0, total_songs - 1)
+    else:  # 單曲循環
+        prev_index = current_index
+    
+    return prev_index
+
+def play_song_by_index(index):
+    """根據索引播放歌曲"""
+    if 0 <= index < len(st.session_state.music_files):
+        st.session_state.current_playlist_index = index
+        st.session_state.selected_audio_file = st.session_state.music_files[index]
+        return True
+    return False
 
 # --- 主介面 ---
 st.title("🎬 YouTube 下載器 & 🎵 網頁播放器")
@@ -561,6 +609,49 @@ with tab3:
             st.markdown("---")
             st.subheader(f"🎵 正在播放: {selected_file.name}")
             
+            # 播放控制區域
+            col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 2])
+            
+            with col1:
+                if st.button("⏮️", key="prev_btn", help="上一首"):
+                    prev_index = get_previous_song()
+                    if prev_index is not None:
+                        play_song_by_index(prev_index)
+                        st.rerun()
+            
+            with col2:
+                if st.button("⏯️", key="play_pause_btn", help="播放/暫停"):
+                    # 這裡可以添加播放/暫停邏輯
+                    st.info("播放控制功能需要手動操作音訊播放器")
+            
+            with col3:
+                if st.button("⏹️", key="stop_btn", help="停止"):
+                    st.info("停止功能需要手動操作音訊播放器")
+            
+            with col4:
+                if st.button("⏭️", key="next_btn", help="下一首"):
+                    next_index = get_next_song()
+                    if next_index is not None:
+                        play_song_by_index(next_index)
+                        st.rerun()
+            
+            with col5:
+                # 播放模式選擇
+                play_mode = st.selectbox(
+                    "播放模式",
+                    ["順序播放", "隨機播放", "單曲循環"],
+                    index=["順序播放", "隨機播放", "單曲循環"].index(st.session_state.play_mode),
+                    key="play_mode_selector"
+                )
+                if play_mode != st.session_state.play_mode:
+                    st.session_state.play_mode = play_mode
+                    st.rerun()
+            
+            # 當前播放資訊
+            current_index = st.session_state.current_playlist_index
+            total_songs = len(st.session_state.music_files)
+            st.info(f"🎵 播放進度: {current_index + 1} / {total_songs} | 模式: {st.session_state.play_mode}")
+            
             # 使用 iPhone 優化的音訊播放器
             with open(selected_file, "rb") as f:
                 audio_bytes = f.read()
@@ -603,6 +694,7 @@ with tab3:
                 with col3:
                     if st.button("▶️", key=f"play_{i}", help="播放此歌曲"):
                         st.session_state.selected_audio_file = file_path
+                        st.session_state.current_playlist_index = i - 1  # 設置當前播放索引
                         st.rerun()
                 
                 with col4:
